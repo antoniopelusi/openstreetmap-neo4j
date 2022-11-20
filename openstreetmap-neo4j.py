@@ -64,7 +64,7 @@ def remove_POI():
     osm.run("""
     MATCH (p:PointOfInterest)
     WHERE p.name = $name
-    DELETE p
+    DETACH DELETE p
     """, parameters={'name': name})
 
 #3 - Add a new Route
