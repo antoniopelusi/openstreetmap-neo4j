@@ -1,6 +1,7 @@
 from py2neo import Graph
 from py2neo import Node
 import os
+import re
 
 #-------------------------------#
 #--------Initialization---------#
@@ -9,7 +10,7 @@ import os
 #initialize connection to the database
 osm = Graph("bolt://localhost:7687", auth=("neo4j", "openstreetmap"))
 
-#create index on name
+#create index on name only at the first start
 try:
     osm.run("CREATE INDEX ON:PointOfInterest(Name)")
 except:
@@ -37,14 +38,13 @@ _________________________________________________________________
 |  0  | Exit
 |  1  | Add a new Point Of Interest
 |  2  | Remove an existing Point Of Interest
-|  3  | Find Points of Interest near a place
-|  4  | Search and locate a Point Of Interest by name
-|  5  | Filter Points of interest by type
-|  6  | Find Shortest Path between two Point Of Interest
-|  7  | 
-|  8  | 
-|  9  | 
-| 10  | 
+|  3  | Add a new Route
+|  4  | Remove an existing Route
+|  5  | Find Points of Interest near a place
+|  6  | Search and locate a Point Of Interest by name
+|  7  | Filter Points of interest by type
+|  8  | Find Shortest Path between two Point Of Interest
+|  9  | List all the Routes available from a Point
 ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
 """)
 
@@ -62,11 +62,31 @@ def add_POI():
 #2 - Remove an existing Point Of Interest
 def remove_POI():
     osm.run("""
-    MATCH (p:PointOfInterest {name: $name})
+    MATCH (p:PointOfInterest)
+    WHERE p.name = $name
     DELETE p
     """, parameters={'name': name})
 
-#3 - Find Points of Interest near a place
+#3 - Add a new Route
+def add_Route():
+    osm.run("""
+    MATCH (source:PointOfInterest), (dest:PointOfInterest)
+    WHERE source.name = $source
+    AND dest.name = $dest
+    CREATE (source)-[:ROUTE{distance: $dist}]->(dest)
+    CREATE (source)<-[:ROUTE{distance: $dist}]-(dest)
+    """, parameters={'source': source, 'dest': dest, 'dist': dist})
+
+#4 - Remove an existing Route
+def remove_Route():
+    osm.run("""
+    MATCH (source:PointOfInterest)<-[r:ROUTE]->(dest:PointOfInterest)
+    WHERE source.name = $source
+    AND dest.name = $dest
+    DELETE r
+    """, parameters={'source': source, 'dest': dest})
+
+#5 - Find Points of Interest near a place
 def list_POI():
     print(osm.run("""
     MATCH (source:PointOfInterest), (dest:PointOfInterest)
@@ -80,7 +100,7 @@ def list_POI():
     LIMIT 10
     """, parameters={'name': name, 'dist': dist}).to_table())
 
-#4 - Search and locate a Point Of Interest by name
+#6 - Search and locate a Point Of Interest by name
 def locate_POI():
     print(osm.run("""
     MATCH (p:PointOfInterest)
@@ -88,7 +108,7 @@ def locate_POI():
     RETURN p.name AS name, p.type as type, p.location.x as X, p.location.y AS Y
     """, parameters={'name': name}).to_table())
 
-#5 - Filter Points of interest by type
+#7 - Filter Points of interest by type
 def filter_POI():
     print(osm.run("""
     MATCH (p1:PointOfInterest), (p2:PointOfInterest)
@@ -100,7 +120,7 @@ def filter_POI():
     LIMIT 10
     """, parameters={'name': name, 'type': type, 'dist': dist}).to_table())
 
-#6 - Find Shortest Path between two Point Of Interest
+#8 - Find Shortest Path between two Point Of Interest
 def sp_POI():
     print(osm.run("""
     MATCH (source:PointOfInterest),(dest:PointOfInterest)
@@ -108,13 +128,24 @@ def sp_POI():
     CALL apoc.algo.dijkstra(source, dest, 'ROUTE', 'distance') YIELD weight
     return source.name, dest.name, round(weight) AS distance;
     """, parameters={'source': source, 'dest': dest}).to_table())
-    path = osm.run("""
+
+    path = str(osm.run("""
     MATCH (source:PointOfInterest),(dest:PointOfInterest)
     WHERE source.name = $source AND dest.name = $dest
     CALL apoc.algo.dijkstra(source, dest, 'ROUTE', 'distance') YIELD path
-    return path;
-    """, parameters={'source': source, 'dest': dest}).to_subgraph()
-    print(path) #TODO: do a pretty print
+    RETURN path;
+    """, parameters={'source': source, 'dest': dest}).to_subgraph())
+
+    #regular expression to remove all the node properties from the path
+    path = re.sub(r'({[^}]*)?[{}]', '', path)
+    print(path)
+
+#9 - List all the Routes available from a Point
+def list_Route():
+    print(osm.run("""
+    MATCH routes=(source:PointOfInterest{name: $name})-[:ROUTE]-()
+    RETURN routes
+    """, parameters={'name': name}).to_table())
 
 #-------------------------------#
 #-------------Start-------------#
@@ -155,37 +186,68 @@ while choice != 0:
         remove_POI()
         print("| Point of Interest removed")
 
-    elif choice == "3": #3 - Find Points of Interest near a place
+    elif choice == "3": #3 - Add a new Route
+        clear_terminal()
+        print("| Insert the name of the first Point Of Interest:")
+        source = input("| >> ")
+        print("| Insert the name of the second Point Of Interest:")
+        dest = input("| >> ")
+        print("| Insert the distance between the Points Of Interest:")
+        dist = float(input("| >> "))
+        add_Route()
+        print("| Route added")
+
+    elif choice == "4": #4 - Remove an existing Route
+        clear_terminal()
+        print("| Insert the name of the first Point Of Interest:")
+        source = input("| >> ")
+        print("| Insert the name of the second Point Of Interest:")
+        dest = input("| >> ")
+        remove_Route()
+        print("| Route removed")
+
+    elif choice == "5": #5 - Find Points of Interest near a place
         clear_terminal()
         print("| Insert the name of the place:")
         name = input("| >> ")
         print("| Insert the max distance (in meters):")
-        dist = int(input("| >> "))
+        dist = float(input("| >> "))
+        print('\n')
         list_POI()
 
-    elif choice == "4": #4 - Search and locate a Point Of Interest by name
+    elif choice == "6": #6 - Search and locate a Point Of Interest by name
         clear_terminal()
         print("| Insert the name:")
         name = input("| >> ")
+        print('\n')
         locate_POI()
 
-    elif choice == "5": #5 - Filter Points of interest by type
+    elif choice == "7": #7 - Filter Points of interest by type
         clear_terminal()
         print("| Insert the name of the Point of Interest:")
         name = input("| >> ")
         print("| Insert the type:")
         type = input("| >> ")
         print("| Insert the max distance (in meters):")
-        dist = int(input("| >> "))
+        dist = float(input("| >> "))
+        print('\n')
         filter_POI()
 
-    elif choice == "6": #6 - Find Shortest Path between two Point Of Interest
+    elif choice == "8": #8 - Find Shortest Path between two Point Of Interest
         clear_terminal()
         print("| Insert the start Point:")
         source = input("| >> ")
         print("| Insert the destination Point:")
         dest = input("| >> ")
+        print('\n')
         sp_POI()
+
+    elif choice == "9": #9 - List all the Routes available from a Point
+        clear_terminal()
+        print("| Insert the name of the Point of Interest:")
+        name = input("| >> ")
+        print('\n')
+        list_Route()
 
     else: #Any other character - Wrong input
         clear_terminal()
