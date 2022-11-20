@@ -56,7 +56,7 @@ def clear_terminal():
 def add_POI():
     print(osm.run("""
     CREATE (p:PointOfInterest:OSMNode {name: $name, type: $type, location: point({srid: 4326, x: $lon, y: $lat}), lon: $lon, lat: $lat})
-    RETURN p.name as name,  p.type as type, p.location.x AS X, p.location.y AS Y
+    RETURN p.name AS name,  p.type AS type, p.location.x AS X, p.location.y AS Y
     """, parameters={'name': name, 'type':type, 'lon': lon, 'lat': lat}).to_table())
     
 #2 - Remove an existing Point Of Interest
@@ -105,7 +105,7 @@ def locate_POI():
     print(osm.run("""
     MATCH (p:PointOfInterest)
     WHERE p.name = $name
-    RETURN p.name AS name, p.type as type, p.location.x as X, p.location.y AS Y
+    RETURN p.name AS name, p.type AS type, p.location.x AS X, p.location.y AS Y
     """, parameters={'name': name}).to_table())
 
 #7 - Filter Points of interest by type
@@ -116,7 +116,7 @@ def filter_POI():
     AND p1.name = $name
     AND p2.name <> "pitch"
     AND point.distance(p1.location, p2.location) <= $dist
-    RETURN p2.name AS name, p2.type as type, p2.location.x AS X, p2.location.y AS Y
+    RETURN p2.name AS name, p2.type AS type, p2.location.x AS X, p2.location.y AS Y
     LIMIT 10
     """, parameters={'name': name, 'type': type, 'dist': dist}).to_table())
 
@@ -124,14 +124,16 @@ def filter_POI():
 def sp_POI():
     print(osm.run("""
     MATCH (source:PointOfInterest),(dest:PointOfInterest)
-    WHERE source.name = $source AND dest.name = $dest
+    WHERE source.name = $source
+    AND dest.name = $dest
     CALL apoc.algo.dijkstra(source, dest, 'ROUTE', 'distance') YIELD weight
-    return source.name, dest.name, round(weight) AS distance;
+    RETURN source.name, dest.name, round(weight) AS distance;
     """, parameters={'source': source, 'dest': dest}).to_table())
 
     path = str(osm.run("""
     MATCH (source:PointOfInterest),(dest:PointOfInterest)
-    WHERE source.name = $source AND dest.name = $dest
+    WHERE source.name = $source
+    AND dest.name = $dest
     CALL apoc.algo.dijkstra(source, dest, 'ROUTE', 'distance') YIELD path
     RETURN path;
     """, parameters={'source': source, 'dest': dest}).to_subgraph())
